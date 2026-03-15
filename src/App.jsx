@@ -6,6 +6,7 @@ import { auth, db } from "./firebase";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
+import Course from "./pages/Course";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import Dashboard from "./pages/Dashboard";
@@ -67,6 +68,7 @@ export default function App() {
           <main>
             <Routes>
               <Route path="/" element={<LandingPage />} />
+              <Route path="/courses" element={<Course />} />
               <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/dashboard" />} />
               <Route path="/register" element={!user ? <RegisterPage /> : <Navigate to="/dashboard" />} />
               <Route path="/courses/:courseId" element={<CourseDetails />} />
