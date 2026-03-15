@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, email, displayName, role (student/admin), createdAt, isBlocked
+    //
+    // Collection: courses
+    // Fields: title, description, price, instructor, duration, thumbnail, category, createdAt
+    //
+    // Collection: enrollments
+    // Fields: userId, courseId, enrolledAt, progress, completedLessons
+    //
+    // Collection: payments
+    // Fields: userId, courseId, amount, status, transactionId, createdAt
+    //
+    // Collection: certificates
+    // Fields: userId, courseId, courseTitle, userName, issuedAt, certificateUrl
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (
+          request.auth.token.email == "olapraveen34@gmail.com" ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
+    }
+
+    function isValidUser(data) {
+      return data.uid is string && 
+             data.email is string &&
+             data.role in ['student', 'admin'];
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['title', 'price']) &&
+             data.title is string && data.title.size() < 200 &&
+             data.price is number && data.price >= 0;
+    }
+
+    function isValidEnrollment(data) {
+      return data.userId is string && data.courseId is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == 'student' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) && request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /courses/{courseId} {
+      allow read: if true; // Courses are public
+      allow write: if isAdmin();
+      
+      match /modules/{moduleId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+      
+      match /lessons/{lessonId} {
+        allow read: if true; // Lessons metadata is public, but content might be restricted in app logic
+        allow write: if isAdmin();
+      }
+    }
+
+    match /enrollments/{enrollmentId} {
+      allow get: if isAuthenticated() && (isAdmin() || resource == null || request.auth.uid == resource.data.userId);
+      allow list: if isAuthenticated() && (isAdmin() || (resource != null && request.auth.uid == resource.data.userId));
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == request.resource.data.userId);
+      allow update: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.userId);
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isAuthenticated() && (isAdmin() || resource == null || request.auth.uid == resource.data.userId);
+      allow list: if isAuthenticated() && (isAdmin() || (resource != null && request.auth.uid == resource.data.userId));
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update: if isAdmin();
+    }
+
+    match /certificates/{certificateId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+    }
+  }
+}
